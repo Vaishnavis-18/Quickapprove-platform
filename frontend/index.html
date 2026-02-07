@@ -744,6 +744,16 @@
             color: #3498db;
         }
 
+        .status-under_review {
+            background: rgba(52, 152, 219, 0.15);
+            color: #3498db;
+        }
+
+        .status-changes_requested {
+            background: rgba(241, 196, 15, 0.15);
+            color: #f1c40f;
+        }
+
         /* Footer */
         footer {
             background: var(--dark);
@@ -1190,6 +1200,16 @@
                         <input type="password" id="registerConfirmPassword" class="form-control" placeholder="Confirm your password" required>
                     </div>
                     
+                    <div class="form-group">
+                        <label for="registerPhone">Phone Number</label>
+                        <input type="tel" id="registerPhone" class="form-control" placeholder="Enter your phone number">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="registerCompany">Company/Business Name</label>
+                        <input type="text" id="registerCompany" class="form-control" placeholder="Enter your business name">
+                    </div>
+                    
                     <button type="submit" class="btn btn-primary" style="width: 100%;">
                         <i class="fas fa-user-plus"></i> Create Account
                     </button>
@@ -1241,21 +1261,6 @@
                     
                     <div id="dashboardSection">
                         <!-- Dynamic content will be loaded here -->
-                        <table class="applications-table">
-                            <thead>
-                                <tr>
-                                    <th>Application ID</th>
-                                    <th>Type</th>
-                                    <th>Departments</th>
-                                    <th>Submitted On</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="applicationsTableBody">
-                                <!-- Applications will be populated by JavaScript -->
-                            </tbody>
-                        </table>
                     </div>
                 </div>
             </div>
@@ -1311,291 +1316,358 @@
     </footer>
 
     <script>
-        // DOM Elements
-        const loginBtn = document.getElementById('loginBtn');
-        const registerBtn = document.getElementById('registerBtn');
-        const heroRegisterBtn = document.getElementById('heroRegisterBtn');
-        const loginModal = document.getElementById('loginModal');
-        const registerModal = document.getElementById('registerModal');
-        const closeLoginModal = document.getElementById('closeLoginModal');
-        const closeRegisterModal = document.getElementById('closeRegisterModal');
-        const switchToRegister = document.getElementById('switchToRegister');
-        const switchToLogin = document.getElementById('switchToLogin');
-        const logoutBtn = document.getElementById('logoutBtn');
-        const dashboard = document.getElementById('dashboard');
-        const userAvatar = document.getElementById('userAvatar');
-        const userName = document.getElementById('userName');
-        const userRole = document.getElementById('userRole');
-        const roleOptions = document.querySelectorAll('.role-option');
-        const roleTabs = document.querySelectorAll('.role-tab');
-        const roleContents = document.querySelectorAll('.role-content');
-        const sidebarLinks = document.querySelectorAll('.sidebar-menu a');
-        const newAppBtn = document.getElementById('newAppBtn');
-        const applicationsTableBody = document.getElementById('applicationsTableBody');
-        const dashboardSection = document.getElementById('dashboardSection');
-        const dashboardTitle = document.getElementById('dashboardTitle');
+        // ==================== BACKEND CONFIGURATION ====================
+        const API_BASE_URL = 'http://localhost:5000/api'; // Change this to your backend URL
         
-        // Current user state
-        let currentUser = null;
+        // ==================== STATE MANAGEMENT ====================
+        let authToken = localStorage.getItem('authToken');
+        let currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
+        let departments = [];
         
-        // Sample applications data
-        const sampleApplications = [
-            { id: "APP-2023-001", type: "Business Registration", departments: ["Commerce", "Tax"], submitted: "2023-10-15", status: "approved" },
-            { id: "APP-2023-002", type: "Construction Permit", departments: ["Urban Development", "Environment"], submitted: "2023-10-20", status: "pending" },
-            { id: "APP-2023-003", type: "Import License", departments: ["Commerce", "Customs"], submitted: "2023-10-25", status: "review" },
-            { id: "APP-2023-004", type: "Food License", departments: ["Health", "Commerce"], submitted: "2023-10-28", status: "rejected" },
-            { id: "APP-2023-005", type: "Environmental Clearance", departments: ["Environment", "Forest"], submitted: "2023-11-01", status: "pending" }
-        ];
-        
-        // Status badge mapping
-        const statusMap = {
-            "pending": { text: "Pending", class: "status-pending" },
-            "approved": { text: "Approved", class: "status-approved" },
-            "rejected": { text: "Rejected", class: "status-rejected" },
-            "review": { text: "Under Review", class: "status-review" }
-        };
-        
-        // Event Listeners
-        loginBtn.addEventListener('click', () => openModal('login'));
-        registerBtn.addEventListener('click', () => openModal('register'));
-        heroRegisterBtn.addEventListener('click', () => openModal('register'));
-        closeLoginModal.addEventListener('click', () => closeModal('login'));
-        closeRegisterModal.addEventListener('click', () => closeModal('register'));
-        
-        switchToRegister.addEventListener('click', (e) => {
-            e.preventDefault();
-            closeModal('login');
-            openModal('register');
-        });
-        
-        switchToLogin.addEventListener('click', (e) => {
-            e.preventDefault();
-            closeModal('register');
-            openModal('login');
-        });
-        
-        logoutBtn.addEventListener('click', logout);
-        
-        // Role selection in modals
-        roleOptions.forEach(option => {
-            option.addEventListener('click', function() {
-                // Remove selected class from all options
-                roleOptions.forEach(opt => opt.classList.remove('selected'));
-                // Add selected class to clicked option
-                this.classList.add('selected');
-            });
-        });
-        
-        // Role tabs in how-it-works section
-        roleTabs.forEach(tab => {
-            tab.addEventListener('click', function() {
-                const role = this.dataset.role;
-                
-                // Update active tab
-                roleTabs.forEach(t => t.classList.remove('active'));
-                this.classList.add('active');
-                
-                // Show corresponding content
-                roleContents.forEach(content => {
-                    content.classList.remove('active');
-                    if (content.classList.contains(role)) {
-                        content.classList.add('active');
-                    }
+        // ==================== API HELPER FUNCTIONS ====================
+        async function apiRequest(endpoint, options = {}) {
+            const url = `${API_BASE_URL}${endpoint}`;
+            const headers = {
+                'Content-Type': 'application/json',
+                ...options.headers
+            };
+
+            if (authToken) {
+                headers['Authorization'] = `Bearer ${authToken}`;
+            }
+
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    headers
                 });
-            });
-        });
-        
-        // Sidebar navigation
-        sidebarLinks.forEach(link => {
-            link.addEventListener('click', function(e) {
-                e.preventDefault();
-                
-                // Update active link
-                sidebarLinks.forEach(l => l.classList.remove('active'));
-                this.classList.add('active');
-                
-                // Load corresponding section
-                const section = this.dataset.section;
-                loadDashboardSection(section);
-            });
-        });
-        
-        // New application button
-        newAppBtn.addEventListener('click', () => {
-            sidebarLinks.forEach(l => l.classList.remove('active'));
-            document.querySelector('[data-section="new-application"]').classList.add('active');
-            loadDashboardSection('new-application');
-        });
-        
-        // Form submissions
-        document.getElementById('loginForm').addEventListener('submit', handleLogin);
-        document.getElementById('registerForm').addEventListener('submit', handleRegister);
-        
-        // Functions
-        function openModal(modalType) {
-            if (modalType === 'login') {
-                loginModal.classList.add('active');
-            } else if (modalType === 'register') {
-                registerModal.classList.add('active');
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'API request failed');
+                }
+
+                return await response.json();
+            } catch (error) {
+                console.error('API Request Error:', error);
+                throw error;
             }
         }
         
-        function closeModal(modalType) {
-            if (modalType === 'login') {
-                loginModal.classList.remove('active');
-            } else if (modalType === 'register') {
-                registerModal.classList.remove('active');
+        // ==================== AUTH FUNCTIONS ====================
+        async function handleLogin(email, password, role) {
+            try {
+                const data = await apiRequest('/login', {
+                    method: 'POST',
+                    body: JSON.stringify({ email, password, role })
+                });
+
+                if (data.success) {
+                    authToken = data.token;
+                    currentUser = data.user;
+                    
+                    localStorage.setItem('authToken', authToken);
+                    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                    
+                    return { success: true, user: data.user };
+                }
+            } catch (error) {
+                return { success: false, error: error.message };
             }
         }
-        
-        function handleLogin(e) {
-            e.preventDefault();
-            
-            const email = document.getElementById('loginEmail').value;
-            const password = document.getElementById('loginPassword').value;
-            const selectedRole = document.querySelector('.role-option.selected').dataset.role;
-            
-            // Simulate login - In a real app, this would be an API call
-            currentUser = {
-                name: email.split('@')[0],
-                email: email,
-                role: selectedRole,
-                avatarInitials: email.substring(0, 2).toUpperCase()
-            };
-            
-            // Update UI
-            updateUserInfo();
-            dashboard.classList.add('active');
-            
-            // Close modal
-            closeModal('login');
-            
-            // Reset form
-            document.getElementById('loginForm').reset();
-            
-            // Show success message
-            showNotification(`Welcome back, ${currentUser.name}!`, 'success');
-            
-            // Load initial dashboard section
-            loadDashboardSection('dashboard-home');
-        }
-        
-        function handleRegister(e) {
-            e.preventDefault();
-            
-            const name = document.getElementById('registerName').value;
-            const email = document.getElementById('registerEmail').value;
-            const password = document.getElementById('registerPassword').value;
-            const confirmPassword = document.getElementById('registerConfirmPassword').value;
-            const selectedRole = document.querySelector('.role-option.selected').dataset.role;
-            
-            // Simple validation
-            if (password !== confirmPassword) {
-                showNotification("Passwords don't match!", 'error');
-                return;
+
+        async function handleRegister(userData) {
+            try {
+                const data = await apiRequest('/register', {
+                    method: 'POST',
+                    body: JSON.stringify(userData)
+                });
+
+                if (data.success) {
+                    authToken = data.token;
+                    currentUser = data.user;
+                    
+                    localStorage.setItem('authToken', authToken);
+                    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                    
+                    return { success: true, user: data.user };
+                }
+            } catch (error) {
+                return { success: false, error: error.message };
             }
-            
-            // Simulate registration - In a real app, this would be an API call
-            currentUser = {
-                name: name,
-                email: email,
-                role: selectedRole,
-                avatarInitials: name.substring(0, 2).toUpperCase()
-            };
-            
-            // Update UI
-            updateUserInfo();
-            dashboard.classList.add('active');
-            
-            // Close modal
-            closeModal('register');
-            
-            // Reset form
-            document.getElementById('registerForm').reset();
-            
-            // Show success message
-            showNotification(`Account created successfully! Welcome to GovSimplify, ${name}!`, 'success');
-            
-            // Load initial dashboard section
-            loadDashboardSection('dashboard-home');
         }
-        
+
         function logout() {
+            authToken = null;
             currentUser = null;
-            dashboard.classList.remove('active');
-            showNotification("You have been logged out successfully.", 'info');
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('currentUser');
+            showNotification('Logged out successfully', 'info');
+            window.location.reload();
         }
         
+        // ==================== APPLICATION FUNCTIONS ====================
+        async function createApplication(applicationData) {
+            try {
+                const data = await apiRequest('/applications', {
+                    method: 'POST',
+                    body: JSON.stringify(applicationData)
+                });
+                return { success: true, application: data.application };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+
+        async function getApplications() {
+            try {
+                const data = await apiRequest('/applications');
+                return { success: true, applications: data.applications };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+
+        async function getApplicationById(id) {
+            try {
+                const data = await apiRequest(`/applications/${id}`);
+                return { success: true, application: data.application };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+
+        async function updateApplicationStatus(id, statusData) {
+            try {
+                const data = await apiRequest(`/applications/${id}/status`, {
+                    method: 'PUT',
+                    body: JSON.stringify(statusData)
+                });
+                return { success: true, application: data.application };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+        
+        // ==================== DEPARTMENT FUNCTIONS ====================
+        async function getDepartments() {
+            try {
+                const data = await apiRequest('/departments');
+                departments = data.departments;
+                return { success: true, departments: data.departments };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+        
+        // ==================== DASHBOARD STATISTICS ====================
+        async function getDashboardStats() {
+            try {
+                const data = await apiRequest('/dashboard/stats');
+                return { success: true, stats: data.stats };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+        
+        // ==================== USER PROFILE FUNCTIONS ====================
+        async function getProfile() {
+            try {
+                const data = await apiRequest('/profile');
+                return { success: true, user: data.user };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+
+        async function updateProfile(profileData) {
+            try {
+                const data = await apiRequest('/profile', {
+                    method: 'PUT',
+                    body: JSON.stringify(profileData)
+                });
+                return { success: true, user: data.user };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+        
+        // ==================== UTILITY FUNCTIONS ====================
+        function getStatusClass(status) {
+            const statusClasses = {
+                'pending': 'status-pending',
+                'under_review': 'status-under_review',
+                'approved': 'status-approved',
+                'rejected': 'status-rejected',
+                'changes_requested': 'status-changes_requested'
+            };
+            return statusClasses[status] || 'status-pending';
+        }
+
+        function formatStatus(status) {
+            return status.replace('_', ' ').toUpperCase();
+        }
+
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+        
+        // ==================== UI FUNCTIONS ====================
         function updateUserInfo() {
             if (currentUser) {
-                userName.textContent = currentUser.name;
-                userRole.textContent = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
-                userAvatar.textContent = currentUser.avatarInitials;
+                document.getElementById('userName').textContent = currentUser.name;
+                document.getElementById('userRole').textContent = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
+                document.getElementById('userAvatar').textContent = currentUser.name.substring(0, 2).toUpperCase();
                 
                 // Update avatar color based on role
+                const avatar = document.getElementById('userAvatar');
                 if (currentUser.role === 'entrepreneur') {
-                    userAvatar.style.background = 'var(--gradient-primary)';
+                    avatar.style.background = 'var(--gradient-primary)';
                 } else if (currentUser.role === 'officer') {
-                    userAvatar.style.background = 'var(--gradient-secondary)';
+                    avatar.style.background = 'var(--gradient-secondary)';
                 } else {
-                    userAvatar.style.background = 'var(--gradient-accent)';
+                    avatar.style.background = 'var(--gradient-accent)';
                 }
             }
         }
-        
-        function loadDashboardSection(section) {
-            // Clear current section
-            dashboardSection.innerHTML = '';
+
+        function showNotification(message, type) {
+            const notification = document.createElement('div');
+            notification.style.position = 'fixed';
+            notification.style.top = '20px';
+            notification.style.right = '20px';
+            notification.style.padding = '15px 20px';
+            notification.style.borderRadius = 'var(--border-radius-sm)';
+            notification.style.boxShadow = 'var(--shadow-lg)';
+            notification.style.zIndex = '9999';
+            notification.style.minWidth = '300px';
+            notification.style.maxWidth = '400px';
+            notification.style.display = 'flex';
+            notification.style.alignItems = 'center';
+            notification.style.gap = '15px';
+            notification.style.animation = 'fadeIn 0.3s ease';
             
-            switch(section) {
-                case 'dashboard-home':
-                    dashboardTitle.textContent = 'Dashboard Overview';
-                    loadDashboardHome();
-                    break;
-                case 'applications':
-                    dashboardTitle.textContent = 'My Applications';
-                    loadApplications();
-                    break;
-                case 'new-application':
-                    dashboardTitle.textContent = 'New Application';
-                    loadNewApplication();
-                    break;
-                case 'documents':
-                    dashboardTitle.textContent = 'My Documents';
-                    loadDocuments();
-                    break;
-                case 'notifications':
-                    dashboardTitle.textContent = 'Notifications';
-                    loadNotifications();
-                    break;
-                case 'profile':
-                    dashboardTitle.textContent = 'Profile Settings';
-                    loadProfile();
-                    break;
-                default:
-                    dashboardTitle.textContent = 'Dashboard';
-                    loadDashboardHome();
+            if (type === 'success') {
+                notification.style.background = 'var(--success)';
+                notification.style.color = 'white';
+                notification.innerHTML = `<i class="fas fa-check-circle" style="font-size: 20px;"></i> <div>${message}</div>`;
+            } else if (type === 'error') {
+                notification.style.background = 'var(--danger)';
+                notification.style.color = 'white';
+                notification.innerHTML = `<i class="fas fa-exclamation-circle" style="font-size: 20px;"></i> <div>${message}</div>`;
+            } else if (type === 'warning') {
+                notification.style.background = 'var(--warning)';
+                notification.style.color = 'white';
+                notification.innerHTML = `<i class="fas fa-exclamation-triangle" style="font-size: 20px;"></i> <div>${message}</div>`;
+            } else {
+                notification.style.background = 'var(--primary)';
+                notification.style.color = 'white';
+                notification.innerHTML = `<i class="fas fa-info-circle" style="font-size: 20px;"></i> <div>${message}</div>`;
             }
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'fadeOut 0.3s ease';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        document.body.removeChild(notification);
+                    }
+                }, 300);
+            }, 5000);
+            
+            notification.addEventListener('click', () => {
+                if (notification.parentNode) {
+                    document.body.removeChild(notification);
+                }
+            });
         }
-        
-        function loadDashboardHome() {
-            const content = `
-                <div class="dashboard-stats">
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 40px;">
-                        <div style="background: var(--gradient-primary); color: white; padding: 25px; border-radius: var(--border-radius);">
-                            <h3 style="font-size: 32px; margin-bottom: 5px;">${sampleApplications.length}</h3>
-                            <p>Total Applications</p>
+
+        // ==================== DASHBOARD SECTION LOADERS ====================
+        async function loadDashboardHome() {
+            document.getElementById('dashboardTitle').textContent = 'Dashboard Overview';
+            
+            const statsResult = await getDashboardStats();
+            let statsContent = '';
+            
+            if (statsResult.success) {
+                const stats = statsResult.stats;
+                
+                if (currentUser.role === 'entrepreneur') {
+                    statsContent = `
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 40px;">
+                            <div style="background: var(--gradient-primary); color: white; padding: 25px; border-radius: var(--border-radius);">
+                                <h3 style="font-size: 32px; margin-bottom: 5px;">${stats.total}</h3>
+                                <p>Total Applications</p>
+                            </div>
+                            <div style="background: var(--gradient-secondary); color: white; padding: 25px; border-radius: var(--border-radius);">
+                                <h3 style="font-size: 32px; margin-bottom: 5px;">${stats.approved || 0}</h3>
+                                <p>Approved</p>
+                            </div>
+                            <div style="background: var(--gradient-accent); color: white; padding: 25px; border-radius: var(--border-radius);">
+                                <h3 style="font-size: 32px; margin-bottom: 5px;">${(stats.pending || 0) + (stats.under_review || 0)}</h3>
+                                <p>In Progress</p>
+                            </div>
+                            <div style="background: var(--gradient-primary); color: white; padding: 25px; border-radius: var(--border-radius);">
+                                <h3 style="font-size: 32px; margin-bottom: 5px;">${stats.rejected || 0}</h3>
+                                <p>Rejected</p>
+                            </div>
                         </div>
-                        <div style="background: var(--gradient-secondary); color: white; padding: 25px; border-radius: var(--border-radius);">
-                            <h3 style="font-size: 32px; margin-bottom: 5px;">${sampleApplications.filter(app => app.status === 'approved').length}</h3>
-                            <p>Approved</p>
+                    `;
+                } else if (currentUser.role === 'officer') {
+                    statsContent = `
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 40px;">
+                            <div style="background: var(--gradient-primary); color: white; padding: 25px; border-radius: var(--border-radius);">
+                                <h3 style="font-size: 32px; margin-bottom: 5px;">${stats.total}</h3>
+                                <p>Total Applications</p>
+                            </div>
+                            <div style="background: var(--gradient-secondary); color: white; padding: 25px; border-radius: var(--border-radius);">
+                                <h3 style="font-size: 32px; margin-bottom: 5px;">${stats.pending || 0}</h3>
+                                <p>Pending Review</p>
+                            </div>
+                            <div style="background: var(--gradient-accent); color: white; padding: 25px; border-radius: var(--border-radius);">
+                                <h3 style="font-size: 32px; margin-bottom: 5px;">${stats.under_review || 0}</h3>
+                                <p>Under Review</p>
+                            </div>
                         </div>
-                        <div style="background: var(--gradient-accent); color: white; padding: 25px; border-radius: var(--border-radius);">
-                            <h3 style="font-size: 32px; margin-bottom: 5px;">${sampleApplications.filter(app => app.status === 'pending' || app.status === 'review').length}</h3>
-                            <p>In Progress</p>
+                    `;
+                } else if (currentUser.role === 'admin') {
+                    statsContent = `
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 40px;">
+                            <div style="background: var(--gradient-primary); color: white; padding: 25px; border-radius: var(--border-radius);">
+                                <h3 style="font-size: 32px; margin-bottom: 5px;">${stats.totalApplications}</h3>
+                                <p>Total Applications</p>
+                            </div>
+                            <div style="background: var(--gradient-secondary); color: white; padding: 25px; border-radius: var(--border-radius);">
+                                <h3 style="font-size: 32px; margin-bottom: 5px;">${stats.totalUsers}</h3>
+                                <p>Total Users</p>
+                            </div>
+                            <div style="background: var(--gradient-accent); color: white; padding: 25px; border-radius: var(--border-radius);">
+                                <h3 style="font-size: 32px; margin-bottom: 5px;">${stats.totalDepartments}</h3>
+                                <p>Departments</p>
+                            </div>
+                            <div style="background: linear-gradient(135deg, #9b59b6 0%, #e74c3c 100%); color: white; padding: 25px; border-radius: var(--border-radius);">
+                                <h3 style="font-size: 32px; margin-bottom: 5px;">${stats.pendingApplications}</h3>
+                                <p>Pending Apps</p>
+                            </div>
                         </div>
-                    </div>
-                    
+                    `;
+                }
+            } else {
+                statsContent = '<p>Unable to load statistics</p>';
+            }
+            
+            // Load recent applications
+            const appsResult = await getApplications();
+            let recentAppsContent = '';
+            
+            if (appsResult.success && appsResult.applications.length > 0) {
+                const recentApps = appsResult.applications.slice(0, 5);
+                recentAppsContent = `
                     <h3 style="margin-bottom: 20px;">Recent Applications</h3>
                     <table class="applications-table">
                         <thead>
@@ -1607,78 +1679,186 @@
                             </tr>
                         </thead>
                         <tbody>
-                            ${sampleApplications.slice(0, 3).map(app => `
+                            ${recentApps.map(app => `
                                 <tr>
-                                    <td>${app.id}</td>
+                                    <td>${app.applicationId}</td>
                                     <td>${app.type}</td>
-                                    <td><span class="status-badge ${statusMap[app.status].class}">${statusMap[app.status].text}</span></td>
-                                    <td>${app.submitted}</td>
+                                    <td><span class="status-badge ${getStatusClass(app.status)}">${formatStatus(app.status)}</span></td>
+                                    <td>${formatDate(app.createdAt)}</td>
                                 </tr>
                             `).join('')}
                         </tbody>
                     </table>
+                `;
+            } else {
+                recentAppsContent = '<p>No applications found</p>';
+            }
+            
+            const content = `
+                <div class="dashboard-stats">
+                    ${statsContent}
+                    
+                    ${recentAppsContent}
                     
                     <div style="margin-top: 40px;">
                         <h3 style="margin-bottom: 20px;">Quick Actions</h3>
-                        <div style="display: flex; gap: 15px;">
-                            <button class="btn btn-primary">
-                                <i class="fas fa-plus-circle"></i> New Application
+                        <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                            ${currentUser.role === 'entrepreneur' ? `
+                                <button class="btn btn-primary" id="quickNewAppBtn">
+                                    <i class="fas fa-plus-circle"></i> New Application
+                                </button>
+                            ` : ''}
+                            <button class="btn btn-outline" id="quickViewAppsBtn">
+                                <i class="fas fa-list"></i> View All Applications
                             </button>
-                            <button class="btn btn-outline">
-                                <i class="fas fa-download"></i> Download Documents
-                            </button>
-                            <button class="btn btn-outline">
-                                <i class="fas fa-question-circle"></i> Get Help
+                            <button class="btn btn-outline" id="quickProfileBtn">
+                                <i class="fas fa-user"></i> My Profile
                             </button>
                         </div>
                     </div>
                 </div>
             `;
             
-            dashboardSection.innerHTML = content;
-        }
-        
-        function loadApplications() {
-            const content = `
-                <table class="applications-table">
-                    <thead>
-                        <tr>
-                            <th>Application ID</th>
-                            <th>Type</th>
-                            <th>Departments</th>
-                            <th>Submitted On</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${sampleApplications.map(app => `
-                            <tr>
-                                <td><strong>${app.id}</strong></td>
-                                <td>${app.type}</td>
-                                <td>${app.departments.join(', ')}</td>
-                                <td>${app.submitted}</td>
-                                <td><span class="status-badge ${statusMap[app.status].class}">${statusMap[app.status].text}</span></td>
-                                <td>
-                                    <button class="btn btn-sm btn-outline" style="margin-right: 5px;">
-                                        <i class="fas fa-eye"></i> View
-                                    </button>
-                                    ${app.status === 'pending' ? `
-                                        <button class="btn btn-sm btn-warning">
-                                            <i class="fas fa-edit"></i> Edit
-                                        </button>
-                                    ` : ''}
-                                </td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            `;
+            document.getElementById('dashboardSection').innerHTML = content;
             
-            dashboardSection.innerHTML = content;
+            // Add event listeners to quick action buttons
+            if (document.getElementById('quickNewAppBtn')) {
+                document.getElementById('quickNewAppBtn').addEventListener('click', () => {
+                    sidebarLinks.forEach(l => l.classList.remove('active'));
+                    document.querySelector('[data-section="new-application"]').classList.add('active');
+                    loadDashboardSection('new-application');
+                });
+            }
+            
+            document.getElementById('quickViewAppsBtn').addEventListener('click', () => {
+                sidebarLinks.forEach(l => l.classList.remove('active'));
+                document.querySelector('[data-section="applications"]').classList.add('active');
+                loadDashboardSection('applications');
+            });
+            
+            document.getElementById('quickProfileBtn').addEventListener('click', () => {
+                sidebarLinks.forEach(l => l.classList.remove('active'));
+                document.querySelector('[data-section="profile"]').classList.add('active');
+                loadDashboardSection('profile');
+            });
         }
-        
-        function loadNewApplication() {
+
+        async function loadApplications() {
+            document.getElementById('dashboardTitle').textContent = 'My Applications';
+            
+            const result = await getApplications();
+            
+            if (result.success && result.applications.length > 0) {
+                const applications = result.applications;
+                const content = `
+                    <table class="applications-table">
+                        <thead>
+                            <tr>
+                                <th>Application ID</th>
+                                <th>Type</th>
+                                <th>Departments</th>
+                                <th>Submitted On</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${applications.map(app => `
+                                <tr>
+                                    <td><strong>${app.applicationId}</strong></td>
+                                    <td>${app.type}</td>
+                                    <td>${app.departments.join(', ')}</td>
+                                    <td>${formatDate(app.createdAt)}</td>
+                                    <td><span class="status-badge ${getStatusClass(app.status)}">${formatStatus(app.status)}</span></td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline view-application" data-id="${app._id}">
+                                            <i class="fas fa-eye"></i> View
+                                        </button>
+                                        ${(app.status === 'pending' || app.status === 'changes_requested') && currentUser.role === 'entrepreneur' ? `
+                                            <button class="btn btn-sm btn-warning edit-application" data-id="${app._id}">
+                                                <i class="fas fa-edit"></i> Edit
+                                            </button>
+                                        ` : ''}
+                                        ${currentUser.role === 'officer' && (app.status === 'pending' || app.status === 'under_review' || app.status === 'changes_requested') ? `
+                                            <button class="btn btn-sm btn-success approve-application" data-id="${app._id}">
+                                                <i class="fas fa-check"></i> Approve
+                                            </button>
+                                            <button class="btn btn-sm btn-danger reject-application" data-id="${app._id}">
+                                                <i class="fas fa-times"></i> Reject
+                                            </button>
+                                        ` : ''}
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+                
+                document.getElementById('dashboardSection').innerHTML = content;
+                
+                // Add event listeners
+                document.querySelectorAll('.view-application').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        const appId = btn.dataset.id;
+                        await viewApplicationDetails(appId);
+                    });
+                });
+                
+                document.querySelectorAll('.approve-application').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        const appId = btn.dataset.id;
+                        await updateApplicationStatus(appId, {
+                            status: 'approved',
+                            comments: 'Application approved by officer'
+                        });
+                        showNotification('Application approved!', 'success');
+                        loadApplications();
+                    });
+                });
+                
+                document.querySelectorAll('.reject-application').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        const appId = btn.dataset.id;
+                        await updateApplicationStatus(appId, {
+                            status: 'rejected',
+                            comments: 'Application rejected by officer'
+                        });
+                        showNotification('Application rejected!', 'success');
+                        loadApplications();
+                    });
+                });
+            } else {
+                document.getElementById('dashboardSection').innerHTML = `
+                    <div style="text-align: center; padding: 50px;">
+                        <i class="fas fa-file-alt" style="font-size: 48px; color: var(--gray); margin-bottom: 20px;"></i>
+                        <h3>No Applications Found</h3>
+                        <p>You haven't submitted any applications yet.</p>
+                        ${currentUser.role === 'entrepreneur' ? `
+                            <button class="btn btn-primary" id="createFirstAppBtn" style="margin-top: 20px;">
+                                <i class="fas fa-plus"></i> Create Your First Application
+                            </button>
+                        ` : ''}
+                    </div>
+                `;
+                
+                if (document.getElementById('createFirstAppBtn')) {
+                    document.getElementById('createFirstAppBtn').addEventListener('click', () => {
+                        sidebarLinks.forEach(l => l.classList.remove('active'));
+                        document.querySelector('[data-section="new-application"]').classList.add('active');
+                        loadDashboardSection('new-application');
+                    });
+                }
+            }
+        }
+
+        async function loadNewApplication() {
+            document.getElementById('dashboardTitle').textContent = 'New Application';
+            
+            // Load departments if not already loaded
+            if (departments.length === 0) {
+                await getDepartments();
+            }
+            
             const content = `
                 <div style="max-width: 800px; margin: 0 auto;">
                     <h3 style="margin-bottom: 30px;">Create New Application</h3>
@@ -1698,6 +1878,11 @@
                         </div>
                         
                         <div class="form-group">
+                            <label for="appTitle">Application Title</label>
+                            <input type="text" id="appTitle" class="form-control" placeholder="Enter application title" required>
+                        </div>
+                        
+                        <div class="form-group">
                             <label for="appDescription">Description</label>
                             <textarea id="appDescription" class="form-control" rows="4" placeholder="Describe your application in detail" required></textarea>
                         </div>
@@ -1705,31 +1890,12 @@
                         <div class="form-group">
                             <label>Select Departments</label>
                             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-top: 10px;">
-                                <label style="display: flex; align-items: center; gap: 8px;">
-                                    <input type="checkbox" value="commerce"> Commerce Department
-                                </label>
-                                <label style="display: flex; align-items: center; gap: 8px;">
-                                    <input type="checkbox" value="tax"> Tax Department
-                                </label>
-                                <label style="display: flex; align-items: center; gap: 8px;">
-                                    <input type="checkbox" value="urban"> Urban Development
-                                </label>
-                                <label style="display: flex; align-items: center; gap: 8px;">
-                                    <input type="checkbox" value="environment"> Environment Department
-                                </label>
-                                <label style="display: flex; align-items: center; gap: 8px;">
-                                    <input type="checkbox" value="health"> Health Department
-                                </label>
-                                <label style="display: flex; align-items: center; gap: 8px;">
-                                    <input type="checkbox" value="customs"> Customs Department
-                                </label>
+                                ${departments.map(dept => `
+                                    <label style="display: flex; align-items: center; gap: 8px;">
+                                        <input type="checkbox" name="departments" value="${dept.name}"> ${dept.name}
+                                    </label>
+                                `).join('')}
                             </div>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="appDocuments">Upload Documents</label>
-                            <input type="file" id="appDocuments" class="form-control" multiple>
-                            <small style="color: var(--gray);">You can upload multiple files (PDF, DOC, JPG, PNG). Max size 10MB each.</small>
                         </div>
                         
                         <div style="display: flex; gap: 15px; margin-top: 30px;">
@@ -1744,17 +1910,34 @@
                 </div>
             `;
             
-            dashboardSection.innerHTML = content;
+            document.getElementById('dashboardSection').innerHTML = content;
             
-            // Add form submission handler
-            document.getElementById('newApplicationForm').addEventListener('submit', function(e) {
+            // Form submission
+            document.getElementById('newApplicationForm').addEventListener('submit', async function(e) {
                 e.preventDefault();
-                showNotification('Application submitted successfully! It will now be reviewed by the relevant departments.', 'success');
-                setTimeout(() => {
-                    loadDashboardSection('applications');
-                    sidebarLinks.forEach(l => l.classList.remove('active'));
-                    document.querySelector('[data-section="applications"]').classList.add('active');
-                }, 1500);
+                
+                const selectedDepartments = Array.from(document.querySelectorAll('input[name="departments"]:checked'))
+                    .map(cb => cb.value);
+                
+                const applicationData = {
+                    type: document.getElementById('appType').value,
+                    title: document.getElementById('appTitle').value,
+                    description: document.getElementById('appDescription').value,
+                    departments: selectedDepartments
+                };
+                
+                const result = await createApplication(applicationData);
+                
+                if (result.success) {
+                    showNotification('Application submitted successfully! It will now be reviewed by the relevant departments.', 'success');
+                    setTimeout(() => {
+                        loadDashboardSection('applications');
+                        sidebarLinks.forEach(l => l.classList.remove('active'));
+                        document.querySelector('[data-section="applications"]').classList.add('active');
+                    }, 1500);
+                } else {
+                    showNotification(result.error, 'error');
+                }
             });
             
             // Save draft button
@@ -1762,128 +1945,13 @@
                 showNotification('Application saved as draft successfully!', 'info');
             });
         }
-        
-        function loadDocuments() {
-            const content = `
-                <div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <h3>My Documents</h3>
-                        <button class="btn btn-primary">
-                            <i class="fas fa-upload"></i> Upload New
-                        </button>
-                    </div>
-                    
-                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
-                        <div style="background: white; border: 1px solid var(--light-gray); border-radius: var(--border-radius); padding: 20px; box-shadow: var(--shadow-sm);">
-                            <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
-                                <div style="width: 50px; height: 50px; background: var(--gradient-primary); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; font-size: 20px;">
-                                    <i class="fas fa-file-pdf"></i>
-                                </div>
-                                <div>
-                                    <h4 style="margin-bottom: 5px;">Business Registration Certificate</h4>
-                                    <p style="color: var(--gray); font-size: 14px;">Uploaded: 2023-10-15</p>
-                                </div>
-                            </div>
-                            <div style="display: flex; gap: 10px;">
-                                <button class="btn btn-sm btn-outline">
-                                    <i class="fas fa-eye"></i> View
-                                </button>
-                                <button class="btn btn-sm btn-outline">
-                                    <i class="fas fa-download"></i> Download
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <div style="background: white; border: 1px solid var(--light-gray); border-radius: var(--border-radius); padding: 20px; box-shadow: var(--shadow-sm);">
-                            <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
-                                <div style="width: 50px; height: 50px; background: var(--gradient-secondary); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; font-size: 20px;">
-                                    <i class="fas fa-file-image"></i>
-                                </div>
-                                <div>
-                                    <h4 style="margin-bottom: 5px;">Identity Proof</h4>
-                                    <p style="color: var(--gray); font-size: 14px;">Uploaded: 2023-10-12</p>
-                                </div>
-                            </div>
-                            <div style="display: flex; gap: 10px;">
-                                <button class="btn btn-sm btn-outline">
-                                    <i class="fas fa-eye"></i> View
-                                </button>
-                                <button class="btn btn-sm btn-outline">
-                                    <i class="fas fa-download"></i> Download
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <div style="background: white; border: 1px solid var(--light-gray); border-radius: var(--border-radius); padding: 20px; box-shadow: var(--shadow-sm);">
-                            <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
-                                <div style="width: 50px; height: 50px; background: var(--gradient-accent); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; font-size: 20px;">
-                                    <i class="fas fa-file-contract"></i>
-                                </div>
-                                <div>
-                                    <h4 style="margin-bottom: 5px;">Tax Registration Certificate</h4>
-                                    <p style="color: var(--gray); font-size: 14px;">Uploaded: 2023-10-10</p>
-                                </div>
-                            </div>
-                            <div style="display: flex; gap: 10px;">
-                                <button class="btn btn-sm btn-outline">
-                                    <i class="fas fa-eye"></i> View
-                                </button>
-                                <button class="btn btn-sm btn-outline">
-                                    <i class="fas fa-download"></i> Download
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
+
+        async function loadProfile() {
+            document.getElementById('dashboardTitle').textContent = 'Profile Settings';
             
-            dashboardSection.innerHTML = content;
-        }
-        
-        function loadNotifications() {
-            const notifications = [
-                { id: 1, title: "Application Approved", message: "Your Business Registration application (APP-2023-001) has been approved by the Commerce Department.", time: "2 hours ago", read: false, type: "success" },
-                { id: 2, title: "Document Request", message: "The Environment Department has requested additional documents for your Construction Permit application.", time: "1 day ago", read: false, type: "warning" },
-                { id: 3, title: "Application Submitted", message: "Your Food License application has been successfully submitted and is now under review.", time: "3 days ago", read: true, type: "info" },
-                { id: 4, title: "Deadline Reminder", message: "The submission deadline for your Import License application is in 5 days.", time: "1 week ago", read: true, type: "info" },
-                { id: 5, title: "Welcome to GovSimplify", message: "Thank you for registering with GovSimplify. Start your first application now!", time: "2 weeks ago", read: true, type: "info" }
-            ];
+            const result = await getProfile();
+            const user = result.success ? result.user : currentUser;
             
-            const content = `
-                <div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <h3>Notifications</h3>
-                        <button class="btn btn-outline" id="markAllReadBtn">
-                            <i class="fas fa-check-double"></i> Mark All as Read
-                        </button>
-                    </div>
-                    
-                    <div>
-                        ${notifications.map(notification => `
-                            <div style="background: white; border-left: 4px solid ${notification.type === 'success' ? 'var(--success)' : notification.type === 'warning' ? 'var(--warning)' : 'var(--primary)'}; border-radius: var(--border-radius-sm); padding: 20px; margin-bottom: 15px; box-shadow: var(--shadow-sm); ${!notification.read ? 'border: 2px solid var(--primary);' : ''}">
-                                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                                    <div>
-                                        <h4 style="margin-bottom: 8px;">${notification.title}</h4>
-                                        <p style="color: var(--gray); margin-bottom: 10px;">${notification.message}</p>
-                                        <span style="font-size: 14px; color: var(--gray);">${notification.time}</span>
-                                    </div>
-                                    ${!notification.read ? '<span style="background: var(--primary); color: white; font-size: 12px; padding: 4px 10px; border-radius: 20px;">New</span>' : ''}
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            `;
-            
-            dashboardSection.innerHTML = content;
-            
-            // Mark all as read button
-            document.getElementById('markAllReadBtn').addEventListener('click', function() {
-                showNotification('All notifications marked as read.', 'info');
-            });
-        }
-        
-        function loadProfile() {
             const content = `
                 <div style="max-width: 600px;">
                     <h3 style="margin-bottom: 30px;">Profile Settings</h3>
@@ -1891,51 +1959,29 @@
                     <form id="profileForm">
                         <div class="form-group">
                             <label for="profileName">Full Name</label>
-                            <input type="text" id="profileName" class="form-control" value="${currentUser ? currentUser.name : ''}" required>
+                            <input type="text" id="profileName" class="form-control" value="${user.name}" required>
                         </div>
                         
                         <div class="form-group">
                             <label for="profileEmail">Email Address</label>
-                            <input type="email" id="profileEmail" class="form-control" value="${currentUser ? currentUser.email : ''}" required>
+                            <input type="email" id="profileEmail" class="form-control" value="${user.email}" required readonly>
                         </div>
                         
                         <div class="form-group">
                             <label for="profilePhone">Phone Number</label>
-                            <input type="tel" id="profilePhone" class="form-control" placeholder="Enter your phone number">
+                            <input type="tel" id="profilePhone" class="form-control" value="${user.phone || ''}" placeholder="Enter your phone number">
                         </div>
                         
                         <div class="form-group">
                             <label for="profileCompany">Company/Business Name</label>
-                            <input type="text" id="profileCompany" class="form-control" placeholder="Enter your business name">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="profileAddress">Address</label>
-                            <textarea id="profileAddress" class="form-control" rows="3" placeholder="Enter your address"></textarea>
-                        </div>
-                        
-                        <h4 style="margin: 30px 0 20px;">Change Password</h4>
-                        
-                        <div class="form-group">
-                            <label for="currentPassword">Current Password</label>
-                            <input type="password" id="currentPassword" class="form-control" placeholder="Enter current password">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="newPassword">New Password</label>
-                            <input type="password" id="newPassword" class="form-control" placeholder="Enter new password">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="confirmNewPassword">Confirm New Password</label>
-                            <input type="password" id="confirmNewPassword" class="form-control" placeholder="Confirm new password">
+                            <input type="text" id="profileCompany" class="form-control" value="${user.company || ''}" placeholder="Enter your business name">
                         </div>
                         
                         <div style="display: flex; gap: 15px; margin-top: 30px;">
                             <button type="submit" class="btn btn-primary">
                                 <i class="fas fa-save"></i> Save Changes
                             </button>
-                            <button type="button" class="btn btn-outline">
+                            <button type="button" class="btn btn-outline" id="cancelProfileBtn">
                                 <i class="fas fa-times"></i> Cancel
                             </button>
                         </div>
@@ -1943,78 +1989,151 @@
                 </div>
             `;
             
-            dashboardSection.innerHTML = content;
+            document.getElementById('dashboardSection').innerHTML = content;
             
             // Profile form submission
-            document.getElementById('profileForm').addEventListener('submit', function(e) {
+            document.getElementById('profileForm').addEventListener('submit', async function(e) {
                 e.preventDefault();
-                showNotification('Profile updated successfully!', 'success');
-            });
-        }
-        
-        function showNotification(message, type) {
-            // Create notification element
-            const notification = document.createElement('div');
-            notification.style.position = 'fixed';
-            notification.style.top = '20px';
-            notification.style.right = '20px';
-            notification.style.padding = '15px 20px';
-            notification.style.borderRadius = 'var(--border-radius-sm)';
-            notification.style.boxShadow = 'var(--shadow-lg)';
-            notification.style.zIndex = '9999';
-            notification.style.minWidth = '300px';
-            notification.style.maxWidth = '400px';
-            notification.style.display = 'flex';
-            notification.style.alignItems = 'center';
-            notification.style.gap = '15px';
-            notification.style.animation = 'fadeIn 0.3s ease';
-            
-            // Set color based on type
-            if (type === 'success') {
-                notification.style.background = 'var(--success)';
-                notification.style.color = 'white';
-                notification.innerHTML = `<i class="fas fa-check-circle" style="font-size: 20px;"></i> <div>${message}</div>`;
-            } else if (type === 'error') {
-                notification.style.background = 'var(--danger)';
-                notification.style.color = 'white';
-                notification.innerHTML = `<i class="fas fa-exclamation-circle" style="font-size: 20px;"></i> <div>${message}</div>`;
-            } else if (type === 'warning') {
-                notification.style.background = 'var(--warning)';
-                notification.style.color = 'white';
-                notification.innerHTML = `<i class="fas fa-exclamation-triangle" style="font-size: 20px;"></i> <div>${message}</div>`;
-            } else {
-                notification.style.background = 'var(--primary)';
-                notification.style.color = 'white';
-                notification.innerHTML = `<i class="fas fa-info-circle" style="font-size: 20px;"></i> <div>${message}</div>`;
-            }
-            
-            // Add to DOM
-            document.body.appendChild(notification);
-            
-            // Remove after 5 seconds
-            setTimeout(() => {
-                notification.style.animation = 'fadeOut 0.3s ease';
-                setTimeout(() => {
-                    if (notification.parentNode) {
-                        document.body.removeChild(notification);
-                    }
-                }, 300);
-            }, 5000);
-            
-            // Add click to dismiss
-            notification.addEventListener('click', () => {
-                if (notification.parentNode) {
-                    document.body.removeChild(notification);
+                
+                const profileData = {
+                    name: document.getElementById('profileName').value,
+                    phone: document.getElementById('profilePhone').value,
+                    company: document.getElementById('profileCompany').value
+                };
+                
+                const result = await updateProfile(profileData);
+                
+                if (result.success) {
+                    showNotification('Profile updated successfully!', 'success');
+                    currentUser = result.user;
+                    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                    updateUserInfo();
+                } else {
+                    showNotification(result.error, 'error');
                 }
             });
+            
+            document.getElementById('cancelProfileBtn').addEventListener('click', () => {
+                loadDashboardSection('dashboard-home');
+                sidebarLinks.forEach(l => l.classList.remove('active'));
+                document.querySelector('[data-section="dashboard-home"]').classList.add('active');
+            });
+        }
+
+        async function viewApplicationDetails(appId) {
+            const result = await getApplicationById(appId);
+            
+            if (result.success) {
+                const app = result.application;
+                document.getElementById('dashboardTitle').textContent = `Application: ${app.applicationId}`;
+                
+                const content = `
+                    <div style="max-width: 800px;">
+                        <div style="background: white; border-radius: var(--border-radius); padding: 30px; margin-bottom: 30px; box-shadow: var(--shadow-md);">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+                                <div>
+                                    <h3 style="margin-bottom: 5px;">${app.type}</h3>
+                                    <p style="color: var(--gray);">ID: ${app.applicationId}</p>
+                                </div>
+                                <span class="status-badge ${getStatusClass(app.status)}">${formatStatus(app.status)}</span>
+                            </div>
+                            
+                            <div style="margin-bottom: 20px;">
+                                <h4 style="margin-bottom: 10px;">Description</h4>
+                                <p>${app.description}</p>
+                            </div>
+                            
+                            <div style="margin-bottom: 20px;">
+                                <h4 style="margin-bottom: 10px;">Departments</h4>
+                                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                    ${app.departments.map(dept => `
+                                        <span style="background: var(--light-gray); padding: 5px 15px; border-radius: 20px; font-size: 14px;">
+                                            ${dept}
+                                        </span>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
+                                <div>
+                                    <h4 style="margin-bottom: 5px; color: var(--gray); font-size: 14px;">Submitted On</h4>
+                                    <p>${formatDate(app.createdAt)}</p>
+                                </div>
+                                <div>
+                                    <h4 style="margin-bottom: 5px; color: var(--gray); font-size: 14px;">Last Updated</h4>
+                                    <p>${formatDate(app.updatedAt)}</p>
+                                </div>
+                                <div>
+                                    <h4 style="margin-bottom: 5px; color: var(--gray); font-size: 14px;">Applicant</h4>
+                                    <p>${app.userId.name}</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div style="background: white; border-radius: var(--border-radius); padding: 30px; box-shadow: var(--shadow-md);">
+                            <h3 style="margin-bottom: 20px;">Application Timeline</h3>
+                            <div style="display: flex; flex-direction: column; gap: 15px;">
+                                ${app.timeline.map(event => `
+                                    <div style="display: flex; gap: 15px; padding: 15px; background: var(--light); border-radius: var(--border-radius-sm);">
+                                        <div style="min-width: 100px;">
+                                            <div style="font-weight: 600;">${event.department}</div>
+                                            <div style="font-size: 12px; color: var(--gray);">${formatDate(event.date)}</div>
+                                        </div>
+                                        <div style="flex: 1;">
+                                            <div style="font-weight: 600; color: var(--primary);">${event.action}</div>
+                                            <div style="margin-top: 5px;">${event.comments || ''}</div>
+                                            <div style="font-size: 12px; color: var(--gray); margin-top: 5px;">Officer: ${event.officer}</div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('dashboardSection').innerHTML = content;
+            } else {
+                showNotification('Failed to load application details', 'error');
+            }
+        }
+
+        function loadDashboardSection(section) {
+            switch(section) {
+                case 'dashboard-home':
+                    loadDashboardHome();
+                    break;
+                case 'applications':
+                    loadApplications();
+                    break;
+                case 'new-application':
+                    loadNewApplication();
+                    break;
+                case 'documents':
+                    loadDocuments();
+                    break;
+                case 'notifications':
+                    loadNotifications();
+                    break;
+                case 'profile':
+                    loadProfile();
+                    break;
+                default:
+                    loadDashboardHome();
+            }
         }
         
-        // Initialize the page with some applications
-        window.addEventListener('DOMContentLoaded', () => {
-            // Load initial applications table
-            loadApplications();
+        // ==================== INITIALIZATION ====================
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize UI
+            updateUserInfo();
             
-            // Add CSS for fadeOut animation
+            // Check if user is already logged in
+            if (currentUser && authToken) {
+                document.getElementById('dashboard').classList.add('active');
+                loadDashboardSection('dashboard-home');
+            }
+            
+            // Add fadeOut animation
             const style = document.createElement('style');
             style.textContent = `
                 @keyframes fadeOut {
@@ -2024,7 +2143,7 @@
             `;
             document.head.appendChild(style);
             
-            // Add smooth scrolling for anchor links
+            // Smooth scrolling
             document.querySelectorAll('a[href^="#"]').forEach(anchor => {
                 anchor.addEventListener('click', function(e) {
                     if (this.getAttribute('href') === '#') return;
@@ -2042,6 +2161,162 @@
                 });
             });
         });
+        
+        // ==================== DOM EVENT LISTENERS ====================
+        // Modal controls
+        document.getElementById('loginBtn').addEventListener('click', () => openModal('login'));
+        document.getElementById('registerBtn').addEventListener('click', () => openModal('register'));
+        document.getElementById('heroRegisterBtn').addEventListener('click', () => openModal('register'));
+        document.getElementById('closeLoginModal').addEventListener('click', () => closeModal('login'));
+        document.getElementById('closeRegisterModal').addEventListener('click', () => closeModal('register'));
+        document.getElementById('switchToRegister').addEventListener('click', (e) => {
+            e.preventDefault();
+            closeModal('login');
+            openModal('register');
+        });
+        document.getElementById('switchToLogin').addEventListener('click', (e) => {
+            e.preventDefault();
+            closeModal('register');
+            openModal('login');
+        });
+        
+        // Logout
+        document.getElementById('logoutBtn').addEventListener('click', logout);
+        
+        // Role selection
+        document.querySelectorAll('.role-option').forEach(option => {
+            option.addEventListener('click', function() {
+                document.querySelectorAll('.role-option').forEach(opt => opt.classList.remove('selected'));
+                this.classList.add('selected');
+            });
+        });
+        
+        // Role tabs
+        document.querySelectorAll('.role-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                const role = this.dataset.role;
+                document.querySelectorAll('.role-tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+                document.querySelectorAll('.role-content').forEach(content => {
+                    content.classList.remove('active');
+                    if (content.classList.contains(role)) {
+                        content.classList.add('active');
+                    }
+                });
+            });
+        });
+        
+        // Sidebar navigation
+        const sidebarLinks = document.querySelectorAll('.sidebar-menu a');
+        sidebarLinks.forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                sidebarLinks.forEach(l => l.classList.remove('active'));
+                this.classList.add('active');
+                const section = this.dataset.section;
+                loadDashboardSection(section);
+            });
+        });
+        
+        // New application button
+        document.getElementById('newAppBtn').addEventListener('click', () => {
+            sidebarLinks.forEach(l => l.classList.remove('active'));
+            document.querySelector('[data-section="new-application"]').classList.add('active');
+            loadDashboardSection('new-application');
+        });
+        
+        // Form submissions
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            const selectedRole = document.querySelector('.role-option.selected').dataset.role;
+            
+            const result = await handleLogin(email, password, selectedRole);
+            
+            if (result.success) {
+                showNotification(`Welcome back, ${result.user.name}!`, 'success');
+                updateUserInfo();
+                document.getElementById('dashboard').classList.add('active');
+                closeModal('login');
+                loadDashboardSection('dashboard-home');
+            } else {
+                showNotification(result.error, 'error');
+            }
+        });
+        
+        document.getElementById('registerForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const userData = {
+                name: document.getElementById('registerName').value,
+                email: document.getElementById('registerEmail').value,
+                password: document.getElementById('registerPassword').value,
+                role: document.querySelector('.role-option.selected').dataset.role,
+                phone: document.getElementById('registerPhone').value,
+                company: document.getElementById('registerCompany').value
+            };
+            
+            if (document.getElementById('registerPassword').value !== document.getElementById('registerConfirmPassword').value) {
+                showNotification("Passwords don't match!", 'error');
+                return;
+            }
+            
+            const result = await handleRegister(userData);
+            
+            if (result.success) {
+                showNotification(`Account created successfully! Welcome, ${result.user.name}!`, 'success');
+                updateUserInfo();
+                document.getElementById('dashboard').classList.add('active');
+                closeModal('register');
+                loadDashboardSection('dashboard-home');
+            } else {
+                showNotification(result.error, 'error');
+            }
+        });
+        
+        // Modal functions
+        function openModal(modalType) {
+            if (modalType === 'login') {
+                document.getElementById('loginModal').classList.add('active');
+            } else if (modalType === 'register') {
+                document.getElementById('registerModal').classList.add('active');
+            }
+        }
+        
+        function closeModal(modalType) {
+            if (modalType === 'login') {
+                document.getElementById('loginModal').classList.remove('active');
+            } else if (modalType === 'register') {
+                document.getElementById('registerModal').classList.remove('active');
+            }
+        }
+        
+        // Demo functions (for sections not fully implemented)
+        function loadDocuments() {
+            document.getElementById('dashboardTitle').textContent = 'My Documents';
+            document.getElementById('dashboardSection').innerHTML = `
+                <div style="text-align: center; padding: 50px;">
+                    <i class="fas fa-folder-open" style="font-size: 48px; color: var(--gray); margin-bottom: 20px;"></i>
+                    <h3>Document Management</h3>
+                    <p>Upload and manage your application documents here.</p>
+                    <p style="color: var(--gray); font-size: 14px;">(This feature will be available soon)</p>
+                </div>
+            `;
+        }
+        
+        function loadNotifications() {
+            document.getElementById('dashboardTitle').textContent = 'Notifications';
+            document.getElementById('dashboardSection').innerHTML = `
+                <div style="text-align: center; padding: 50px;">
+                    <i class="fas fa-bell" style="font-size: 48px; color: var(--gray); margin-bottom: 20px;"></i>
+                    <h3>Notifications</h3>
+                    <p>View your application notifications and updates here.</p>
+                    <p style="color: var(--gray); font-size: 14px;">(This feature will be available soon)</p>
+                </div>
+            `;
+        }
     </script>
 </body>
 </html>
