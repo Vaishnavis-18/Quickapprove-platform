@@ -458,6 +458,7 @@
             display: none;
             opacity: 0;
             transition: opacity 0.3s;
+            padding: 20px;
         }
 
         .modal-overlay.active {
@@ -471,8 +472,11 @@
             border-radius: var(--border-radius);
             width: 100%;
             max-width: 500px;
+            max-height: 90vh;
             overflow: hidden;
             box-shadow: var(--shadow-xl);
+            display: flex;
+            flex-direction: column;
         }
 
         .modal-header {
@@ -482,17 +486,22 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-shrink: 0;
+            position: relative;
+            z-index: 10;
         }
 
         .modal-header h3 {
-            font-size: 24px;
+            font-size: 22px;
+            margin: 0;
+            flex: 1;
         }
 
         .close-modal {
             background: transparent;
             border: none;
             color: white;
-            font-size: 24px;
+            font-size: 28px;
             cursor: pointer;
             display: flex;
             align-items: center;
@@ -501,6 +510,7 @@
             height: 36px;
             border-radius: 50%;
             transition: background 0.3s;
+            margin-left: 10px;
         }
 
         .close-modal:hover {
@@ -508,7 +518,9 @@
         }
 
         .modal-body {
-            padding: 30px;
+            padding: 25px 30px;
+            overflow-y: auto;
+            flex: 1;
         }
 
         .form-group {
@@ -813,8 +825,25 @@
             color: #b0b7c3;
             font-size: 14px;
         }
+        
+        /* For very tall forms, reduce spacing */
+        @media (max-height: 700px) {
+            .modal-body {
+                padding: 20px 25px;
+            }
+            
+            .form-group {
+                margin-bottom: 15px;
+            }
+            
+            .form-control {
+                padding: 12px 14px;
+            }
+        }
 
+        
         /* Responsive Design */
+        
         @media (max-width: 992px) {
             .hero-content {
                 flex-direction: column;
@@ -2320,3 +2349,4 @@
     </script>
 </body>
 </html>
+
